@@ -1,0 +1,118 @@
+import tkinter as tk #Impordib vajalikud moodulid
+import math
+import random
+import os 
+
+# Sätete osa
+KÕRGUS = 1080
+LAIUS = 1920
+SHIP_SPEED = 10
+kuul = 200
+Spawn_distance = 100
+#os.system("doommuusik.mp3") # avab windowsis mp3 faili nimega doommuusik.
+
+aken = tk.Tk()
+aken.title("Kuradi ringid")
+
+canvas = tk.Canvas(aken, width=LAIUS, height=KÕRGUS, bg='white')
+canvas.pack()
+
+#image = tk.PhotoImage(file='pixelblog.png')
+canvas.create_image(KÕRGUS, LAIUS)
+
+def draw_triangle(canvas, x, y, angle): #hunnik trigonomeetriat mis arvutab kolmnurga suuruse, ja mis suunas see peaks näitama, et olla pööratud hiire suunas.
+    size = 10 #kolmnurga suurus
+    points = [ 
+        (x + size * math.cos(math.radians(angle)), y + size * math.sin(math.radians(angle))),#trigonomeetria läbi arvutatakse kolmnurga iga tipu x ja y kordinaadid
+        (x + size * math.cos(math.radians(angle + 120)), y + size * math.sin(math.radians(angle + 120))),
+        (x + size * math.cos(math.radians(angle + 240)), y + size * math.sin(math.radians(angle + 240))),
+    ]
+    return canvas.create_polygon(points, fill='black', tags='kolmnurk') #kolnurga tegemine ja värvimine
+
+def update_triangle(event):#funktsioon mis uuendab kolmnurga asukohta selle kustutades ja uuesti joonistades, aga hiire suunas
+    canvas.delete('kolmnurk')
+    mouse_x, mouse_y = event.x, event.y #Saab hiire kordid
+    angle = math.degrees(math.atan2(mouse_y - center_y, mouse_x - center_x)) #arvutab kolmnurga pöörde nurga
+    global kolmnurg
+    kolmnurg = draw_triangle(canvas, center_x, center_y, angle) #loob uue kolmnurga
+
+def pewpew(event): #vajutades vasakut hiire klõpsu joonistab see kollase joone mis kontrollib kas see overlapib värvidega mis pole must
+    print("vasak")
+    global line_id, Skoor
+    x, y = event.x, event.y
+    
+    dx = x - center_x
+    dy = y - center_y #arvutab kauguse hiirest
+    distance = math.sqrt(dx**2 + dy**2)
+    
+    max_length = kuul #pikkus kui kaugele kuul laseb
+    if distance > max_length:
+        ratio = max_length / distance
+        x = center_x + dx * ratio
+        y = center_y + dy * ratio
+    line_id = canvas.create_line(center_x, center_y, x, y, fill="yellow", width=3) #joonistab kollase joone ekraani keskelt hiire kordinaatide suunas
+    
+    # Check for collisions
+    overlapping_items = canvas.find_overlapping(center_x, center_y, x, y) #kontrollib kas see joon puudutab mõnda teist värvi
+    for item in overlapping_items:
+        if item != line_id: #välistab enda, kuuli
+            item_color = canvas.itemcget(item, "fill") #võtab objektilt värvi omaduse (nt kui ruut on punane annab {item_color} väärtuseks "red"
+            if item_color and item_color != "black": #kui objektil on värv ja see värv pole must siis see kustutab selle ruudu millega puutus
+                canvas.delete(item)
+                Skoor += 1 #
+                #print(f"Cubes hit: {Skoor}")
+                spawn_random_cube() #käivitab funktsiooni
+    
+    canvas.after(35, lambda: canvas.delete(line_id)) #kustutab kollase joones (kuuli) peale 35-te millisekundit (tundub nagu piisav aeg, et kuuli näha)
+
+def spawn_random_cube():
+    while True:#kui aktiveeritud
+        x = random.randint(0, canvas.winfo_width() - 50) #valib ruudu x kordinaadi suvaliselt
+        y = random.randint(0, canvas.winfo_height() - 50) #samaga aga y kord
+        distance_to_center = math.sqrt((x - center_x)**2 + (y - center_y)**2)
+        if distance_to_center > Spawn_distance:
+            break #teeb kindlaks, et ruudud ei tekiks liiga lähedale keskele
+    color = random.choice(['red', 'blue', 'green']) #valib värvi suvaliselt
+    layer = MovableLayer(canvas, x, y, 15, 15, color) #loob ruudu 
+    layers.append(layer) #mingi liikumis asi mida vaevu mõistan
+    move_towards_center(layer) 
+
+def move_towards_center(layer): #liikumis funktsioon mida vaevu mõistan
+    x1, y1, x2, y2 = canvas.coords(layer.rect)
+    layer_center_x = (x1 + x2) / 2
+    layer_center_y = (y1 + y2) / 2
+    canvas_center_x = canvas.winfo_width() / 2
+    canvas_center_y = canvas.winfo_height() / 2
+    
+    dx = (canvas_center_x - layer_center_x) / 10 #Liigub x sammu keskele poole
+    dy = (canvas_center_y - layer_center_y) / 10 #Liigub y sammu keskele poole
+    canvas.move(layer.rect, dx, dy)
+    
+
+    if math.sqrt((layer_center_x - canvas_center_x)**2 + (layer_center_y - canvas_center_y)**2) <= 50: #loob teatud raadiuse aluse keskele mida tuleb kuubi eest kaitsta
+        print("Game Over")
+        print(f"Ruute tapetud: ", Skoor)
+        aken.destroy() #paneb akna kinni kui ruut puudutab raadiust
+    else:
+        aken.after(50, move_towards_center, layer)
+
+class MovableLayer:
+    def __init__(self, canvas, x, y, width, height, color):
+        self.canvas = canvas
+        self.rect = canvas.create_rectangle(x, y, x + width, y + height, fill=color)
+        
+line_id = None #kuul
+Skoor = 0 #skoor
+canvas.bind("<Button-1>", pewpew)    #vaska
+canvas.pack()
+aken.bind('<Key>') 
+center_x, center_y = LAIUS / 2, KÕRGUS / 2    #akna kesk punkt
+canvas.bind('<Motion>', update_triangle)    #mdea mida see teeb aga kui selle eemaldan läheb kõik katki
+
+layers = [    #määrab algsete ruutude suuruse värvi asukoha ja suuruse
+    MovableLayer(canvas, 960, 600, 10, 10, 'red'),
+    MovableLayer(canvas, 960, 600, 10, 10, 'blue'),
+    MovableLayer(canvas, 960, 600, 10, 10, 'green')
+]
+
+aken.mainloop()
